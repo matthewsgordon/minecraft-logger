@@ -23,6 +23,7 @@ public class App extends JavaPlugin implements Listener {
 
     private TrialStatus trialStatus;
     private long trialStartTime;
+    private GameEventRepository gameRepo;
 
     private String getTrialStartLocation(double x) {
         switch ((int)(x)) {
@@ -45,6 +46,8 @@ public class App extends JavaPlugin implements Listener {
         // Register the event listener
         getServer().getPluginManager().registerEvents(this, this);
         trialStatus = TrialStatus.TRIAL_STOPPED;
+        getLogger().info("Connecting to game event repository...");
+        gameRepo = new GameEventRepository();
     }
 
     @EventHandler
