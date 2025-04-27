@@ -16,6 +16,7 @@ import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -29,6 +30,16 @@ public class App extends JavaPlugin implements Listener {
 
     boolean stopRepeater = true;
 
+    final double X_OFFSET = -104.5;
+    final double Y_OFFSET = 29;
+    final double Z_OFFSET = 72.5;
+
+    String trialId;
+
+    private String generateTrialId(String playerName) {
+        return playerName + "-" + String.valueOf(System.currentTimeMillis());
+    }
+
     public void onEnable() {
         Bukkit.getServer().getPluginManager().registerEvents(this, this);
         this.trackerLogger.info("TRACKING PLUGIN INITIALISING");
@@ -41,6 +52,7 @@ public class App extends JavaPlugin implements Listener {
     @EventHandler
     public void onLogin(PlayerJoinEvent event) {
         final Player thePlayer = event.getPlayer();
+        trialId = generateTrialId(thePlayer.getName());
         this.stopRepeater = true;
         Location playerSpawnLocation = new Location(thePlayer.getWorld(), thePlayer.getLocation().getBlockX(), thePlayer.getLocation().getBlockY(), thePlayer.getLocation().getBlockZ());
         this.trackerLogger.info(event.getPlayer().getName() + " has logged in");
@@ -117,7 +129,7 @@ public class App extends JavaPlugin implements Listener {
             File dataFolder = getDataFolder();
             if (!dataFolder.exists())
                 dataFolder.mkdir();
-            File saveTo = new File(getDataFolder(), currentPlayer.getPlayer().getName() + "_location.log");
+            File saveTo = new File(getDataFolder(), currentPlayer.getPlayer().getName() + "_location.csv");
             if (!saveTo.exists())
                 saveTo.createNewFile();
             int groundHeight = currentPlayer.getWorld().getHighestBlockYAt(playerCurrentLocation);
@@ -134,15 +146,42 @@ public class App extends JavaPlugin implements Listener {
                 lookingAtInfo = targetBlock.getType() + " at (" +
                         targetBlock.getX() + ", " + targetBlock.getY() + ", " + targetBlock.getZ() + ")";
             }
+            // CSV Header (first line)
+            if (saveTo.length() == 0) {
+                pw.println("timestamp,pos_x,pos_y,pos_z,norm_pos_x,norm_pos_y,norm_pos_z,pitch,yaw,lookingat");
+            }
 
-            pw.println(format.format(nowDate) + " CurrentLocation(x,y,z): " + playerCurrentLocation.getBlockX() + " " +
-                    playerCurrentLocation.getBlockY() + " " + playerCurrentLocation.getBlockZ() + " Head_Direction: " +
-                    playerCurrentLocation.getPitch() + " " + playerCurrentLocation.getYaw() + " Looking At: " + lookingAtInfo);
+            double pos_x = playerCurrentLocation.getX() + X_OFFSET;
+            double pos_y = playerCurrentLocation.getY() + Y_OFFSET;
+            double pos_z = playerCurrentLocation.getZ() + Z_OFFSET;
+
+            double magnitude = Math.sqrt(pos_x * pos_x + pos_y * pos_y + pos_z * pos_z);
+            double norm_pos_x = 0;
+            double norm_pos_y = 0;
+            double norm_pos_z = 0;
+
+            if (magnitude != 0) { //Avoid division by zero.
+                norm_pos_x = pos_x / magnitude;
+                norm_pos_y = pos_y / magnitude;
+                norm_pos_z = pos_z / magnitude;
+            }
+
+            // CSV Data Row
+            pw.println(this.trialId + "," + format.format(nowDate) + "," + pos_x + "," +
+                    pos_y + "," + pos_z + "," + norm_pos_x + "," + norm_pos_y + "," + norm_pos_z + "," +
+                    playerCurrentLocation.getPitch() + "," + playerCurrentLocation.getYaw() + "," + lookingAtInfo);
+
             pw.close();
         } catch (IOException e) {
             e.printStackTrace();
         }
 
+    }
+
+    @EventHandler
+    public void onPlayerTeleport(PlayerTeleportEvent event) {
+        this.stopRepeater = true;
+        this.trialId = generateTrialId(event.getPlayer().getName());
     }
 
     @EventHandler
@@ -156,17 +195,18 @@ public class App extends JavaPlugin implements Listener {
         Score scoreE = objectiveE.getScore("Error_Tracker");
         Score scoreT = objectiveT.getScore("EA_TimeSECS");
         // Check if the action is a right-click on a block
-        if (event.getAction() == Action.RIGHT_CLICK_BLOCK) {
+        if (event.getAction() == Action.RIGHT_CLICK_BLOCK) {    
             Block clickedBlock = event.getClickedBlock();
             // Check if the block is a button
             if (clickedBlock != null && (clickedBlock.getType() == Material.STONE_BUTTON
                     || clickedBlock.getType() == Material.OAK_BUTTON)) {
                 getLogger().info(System.currentTimeMillis() + ": " + event.getPlayer().getName());
+                this.stopRepeater = false; 
                 try {
                     File scoreboardFolder = getDataFolder();
                     if (!scoreboardFolder.exists())
                         scoreboardFolder.mkdir();
-                    File scoreboardsaveTo = new File(getDataFolder(), event.getPlayer().getDisplayName() + "_quickstats.csv");
+                    File scoreboardsaveTo = new File(getDataFolder(), this.trialId + "_quickstats.csv");
                     if (!scoreboardsaveTo.exists())
                         scoreboardsaveTo.createNewFile();
                     Date nowDate = new Date();
